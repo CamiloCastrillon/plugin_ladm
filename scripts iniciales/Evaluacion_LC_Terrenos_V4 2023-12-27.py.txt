@@ -1,0 +1,122 @@
+#Nombre: Evaluacion capa lc_terreno
+#Autor: Miguel Idrobo, Harold Bedoya y Universidad del Valle
+#Fecha: Diciembre 2023
+#Proposito: Evaluar las inconsistencias de la capa lc_terreno de acuerdo al documento ----
+
+
+#Importar librerias necesarias
+from qgis.core import QgsProject, QgsVectorLayer, QgsFeature, QgsField, QgsFields, QgsWkbTypes
+import csv
+from PyQt5.QtCore import QVariant
+import processing
+
+def inconsistencias_terreno_municipio_urbano():
+    # Lista de capas necesarias para ejecutar el script
+    capas_requeridas = ['cc_limitemunicipio', 'cc_perimetrourbano', 'lc_terreno']
+
+    # Obtener la instancia del proyecto actual
+    project = QgsProject.instance()
+
+    # Crear un conjunto con los nombres de todas las capas cargadas - Dividir dado que esta en el geopackage
+    nombres_capas_cargadas = set()
+    for layer in project.mapLayers().values():
+        # Dividir el nombre de la capa en dos partes en el carácter '—'
+        parts = layer.name().split(' — ')
+        if len(parts) > 1:
+            nombres_capas_cargadas.add(parts[1])
+
+    # Inicia las variables para las capas
+    capa_lc_terreno = None
+    capa_limite_urbano = None
+    capa_limite_municipio = None
+
+    # Verificar si todas las capas requeridas están cargadas y asigna una variable
+    faltan_capas = False
+    for capa in capas_requeridas:
+        if capa in nombres_capas_cargadas:
+            for layer in project.mapLayers().values():
+                if layer.name().endswith(capa):
+                    if capa == 'lc_terreno':
+                        capa_lc_terreno = layer
+                    elif capa == 'cc_perimetrourbano':
+                        capa_limite_urbano = layer
+                    elif capa == 'cc_limitemunicipio':
+                        capa_limite_municipio = layer
+                    break
+        else:
+            print(f"Falta la capa: {capa}")
+            faltan_capas = True
+
+    #Condicional que habilita el procesamiento en que caso de que esten las capas requeridas
+    if faltan_capas:
+        print("No se pueden cargar algunas capas requeridas o falta un campo necesario. El proceso no puede continuar.")
+    else:
+        print("Todas las capas requeridas y el campo necesario están cargados correctamente. Puede continuar con el proceso.")
+
+        # Verificar si la capa 'lc_terreno' tiene el campo 'terreno_codigo'
+        if capa_lc_terreno and capa_lc_terreno.fields().indexFromName('terreno_codigo') == -1:
+            print("La capa 'lc_terreno' no tiene el campo 'terreno_codigo'.")
+            faltan_capas = True
+
+        # Procesar las features de 'lc_terreno' si todas las capas están presentes y correctas
+        #if not faltan_capas and capa_lc_terreno and capa_limite_urbano:
+        campos = QgsFields()
+        campos.append(QgsField("codigo_catastral", QVariant.String))
+        campos.append(QgsField("Inconsistencias", QVariant.String))
+
+        # Determinar el sistema de coordenadas de las capas de entrada
+        crs = capa_lc_terreno.crs().authid()
+
+        # Crear una nueva capa de memoria para inconsistencias con los campos definidos
+        capa_inconsistencias = QgsVectorLayer(f"Polygon?crs={crs}", "reporte_limites", "memory")
+        prov = capa_inconsistencias.dataProvider()
+        prov.addAttributes(campos.toList())
+        capa_inconsistencias.updateFields()
+        
+        
+        for feature in capa_lc_terreno.getFeatures():
+            numero_predial = feature["terreno_codigo"]
+            geom_predio = feature.geometry()
+            descripcion = ""
+
+            # Evaluación con respecto al límite urbano
+            es_urbano = numero_predial and numero_predial[5:7] == '01'
+            area_total = geom_predio.area()
+            area_dentro_limite = sum(geom_predio.intersection(perimetro.geometry()).area() for perimetro in capa_limite_urbano.getFeatures())
+            porcentaje_dentro_limite = (area_dentro_limite / area_total) * 100
+            
+            if es_urbano and porcentaje_dentro_limite < 50:
+                descripcion = "Inconsistencia o no conformidad 50% supera el límite urbano"
+            elif not es_urbano and porcentaje_dentro_limite >= 50:
+                descripcion = "Inconsistencia o no conformidad 50% del terreno rural se encuentra dentro del perímetro urbano"
+
+            # Evaluación con respecto al límite municipal
+            esta_dividido = False
+            esta_fuera = True
+            for municipio in capa_limite_municipio.getFeatures():
+                if geom_predio.intersects(municipio.geometry()):
+                    esta_fuera = False
+                    if not geom_predio.within(municipio.geometry()):
+                        esta_dividido = True
+                        break
+
+            if esta_dividido:
+                descripcion = "El predio se encuentra dividido entre dos municipios"
+            elif esta_fuera:
+                descripcion = "Predio completamente fuera del límite Municipal"
+
+            if descripcion:
+                # Añadir feature a la nueva capa de inconsistencias
+                new_feature = QgsFeature(campos)
+                new_feature.setGeometry(feature.geometry())
+                new_feature["codigo_catastral"] = numero_predial
+                new_feature["Inconsistencias"] = descripcion
+                prov.addFeature(new_feature)
+
+                
+
+        # Añadir la capa de inconsistencias al proyecto QGIS
+        QgsProject.instance().addMapLayer(capa_inconsistencias)
+
+#Ejecutar función
+inconsistencias_terreno_municipio_urbano()
