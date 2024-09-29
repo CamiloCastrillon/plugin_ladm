@@ -1,5 +1,8 @@
 """
-El siguiente script tendrá funciones relacionadas con reglas sobre contención entre capas
+El siguiente script tendrá funciones relacionadas con reglas sobre contención entre capas.
+
+Última Actualización: Septiembre 26 del 2024
+Juan Camilo Navia Castrillón ; juan.navia.castrillon@correounivalle.edu.co
 """
 from qgis.core import QgsProject
 from qgis import processing
@@ -29,7 +32,6 @@ def contains_by_2_layers(name_container:str, name_verify:str):
         'OVERLAY'   : container_layer,
         'OUTPUT'    : 'TEMPORARY_OUTPUT'  # Guardar el resultado de forma temporal
     }
-
     # Ejecutar la herramienta de diferencia
     result= processing.run("native:difference", params)
 

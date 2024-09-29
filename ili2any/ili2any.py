@@ -1,7 +1,10 @@
 """
-Contiene funciones para transformar archivos ili en otros formatos de bases de datos, usando las herramientas de interlist
+Contiene funciones para transformar archivos ili en otros formatos de bases de datos, usando las herramientas de interlist:
     Consultar para descarga en: https://www.interlis.ch/en/downloads/ili2db
     Contultar para documentación en: https://github.com/claeis/ili2db/blob/master/docs/ili2db_es.rst
+
+Última Actualización: Septiembre 26 del 2024
+Juan Camilo Navia Castrillón ; juan.navia.castrillon@correounivalle.edu.co
 """
 import subprocess
 import os
